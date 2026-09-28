@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Talent Consultancy"
+description = "An editorial talent acquisition consultancy website with a frictionless, one-question-at-a-time candidate onboarding flow and a focused B2B services presentation."
+version = "1.0.0"
+id = "artifacts/talent-consultancy"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25416
+
+[services.development]
+run = "pnpm --filter @workspace/talent-consultancy run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/talent-consultancy", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/talent-consultancy/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25416"
+BASE_PATH = "/"

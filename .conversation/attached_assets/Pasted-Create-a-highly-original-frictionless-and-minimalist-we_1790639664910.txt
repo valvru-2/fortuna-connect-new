@@ -1,0 +1,48 @@
+Create a highly original, frictionless, and minimalist web application for an elite Talent Acquisition Consultancy. The goal is zero drop-off rate for candidates submitting their data, and projecting strong corporate authority for B2B clients.
+
+### DESIGN SYSTEM & AESTHETICS (NEO-SWISS / REFINED CORPORATE BRUTALISM)
+- Theme: High-contrast, architectural, and completely flat (NO drop shadows, NO glassmorphism, NO generic rounded floating cards). Very sharp, deliberate, and professional.
+- Color Palette:
+  - Primary Background: #0B1120 (Very Dark Navy / Obsidian) for massive, solid blocks of color.
+  - Secondary Background: #FFFFFF (Pure White) and #F1F5F9 (Cool Slate) for stark contrast sections.
+  - Accent Color: #2563EB (Vibrant Corporate Blue) for distinct, razor-sharp active states and primary lines.
+- Typography:
+  - Headings: Use a bold, commanding Grotesque sans-serif (e.g., 'Space Grotesk', 'Syne', or 'Inter Tight' with tight tracking). Extremely large font sizes.
+  - Body: 'Inter' or 'Geist' for absolute clarity.
+- UI Style: Architectural layout. Hard edges (rounded-sm at most), prominent divider lines (1px solid borders separating sections), solid color blocks, and generous macro-whitespace.
+
+### CORE STRUCTURE & COMPONENTS
+
+1. HEADER & NAVIGATION:
+   - Minimalist, solid (not sticky/transparent) top bar.
+   - Left: Simple typographic logo.
+   - Right: Two stark, text-only links ("For Companies", "Our Pipeline") and one solid primary blue button with sharp edges: "Connect Talent".
+
+2. HERO SECTION (SPLIT SCREEN ARCHITECTURE):
+   - Left side (60% width, Solid Dark Navy Background):
+     - A sharp, bright blue horizontal accent line above the text (like a subtle eyebrow).
+     - Massive Headline (White text): "Connecting Talent with Opportunity." (Or equivalent in Spanish: "Conectando talento con oportunidades.")
+     - Subheadline (Light Slate text): "Specialized search and selection to identify and integrate the best professionals into your company."
+   - Right side (40% width):
+     - A single, high-quality professional photography showing real people in a modern office environment (e.g., a strategic meeting or whiteboard session). The image should have a sharp or slightly curved inner edge, contrasting starkly with the dark navy background.
+
+3. FRICTIONLESS CANDIDATE ONBOARDING (THE "ZERO-DROP-OFF" FORM):
+   - Replace traditional long forms with a "One-Question-at-a-Time" conversational flow (Typeform style, but integrated directly into the UI).
+   - Container: A massive white block spanning the screen.
+   - Step 1 (The Hook): "Let's build your profile. Connect with LinkedIn" (Massive, distinct LinkedIn blue button).
+   - Step 2 (Manual alternative, only if they decline LinkedIn):
+     - Minimalist input fields (just a bottom border, no enclosing box).
+     - Flow: 1. "What is your primary role?" -> Next. 2. "Upload your CV (Drag & Drop)" -> Next. 3. "Email address?" -> Done.
+   - Progress is shown via a minimal, sharp blue progress bar at the top of the form section.
+
+4. B2B VALUE PROPOSITION (MINIMALIST GRID):
+   - A stark, 3-column grid separating offerings (e.g., "Executive Search", "Tech Talent", "Culture Fit").
+   - Instead of icons, use large, bold typography for numbers (01, 02, 03) and a 1px solid separator line between each column.
+
+5. FOOTER:
+   - Extremely utilitarian. Dark Navy background, stark white text, essential links organized in a clean architectural grid.
+
+### TECHNICAL REQUIREMENTS
+- Build with Tailwind CSS, utilizing flexbox/css-grid for the architectural split-screen layouts.
+- Implement React state (useState) to manage the multi-step, frictionless candidate form so it transitions instantly between questions without page reloads.
+- Ensure the contrast ratios are extremely high and the design feels distinctly "editorial" and "Swiss design" rather than a generic tech SaaS.
