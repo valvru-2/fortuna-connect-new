@@ -1,0 +1,7 @@
+import { ArrowUpRight } from 'lucide-react';
+import type { Translations } from '../content';
+
+export default function Footer({ t }: { t: Translations }) {
+  const year = new Date().getFullYear();
+  return <footer className="site-footer"><div className="footer-top"><div><a className="brand-lockup" href="#top" data-testid="link-footer-brand"><span className="brand-mark">F</span><span className="brand-type">FORTUNA CONNECT</span></a><p className="footer-tagline">{t.footer.tagline}</p></div><div className="footer-column"><h3 className="eyebrow">{t.footer.explore}</h3><a href="#companies" data-testid="link-footer-companies">{t.footer.companies} <ArrowUpRight size={13} aria-hidden="true" /></a><a href="#pipeline" data-testid="link-footer-pipeline">{t.footer.pipeline} <ArrowUpRight size={13} aria-hidden="true" /></a><a href="#candidate" data-testid="link-footer-connect">{t.footer.connect} <ArrowUpRight size={13} aria-hidden="true" /></a></div><div className="footer-column"><h3 className="eyebrow">{t.footer.contact}</h3><a href="https://thefortunaconnect.com" target="_blank" rel="noreferrer" data-testid="link-footer-website">{t.footer.website} <ArrowUpRight size={13} aria-hidden="true" /></a><span className="footer-locations">{t.footer.locations}</span></div></div><div className="footer-bottom"><span>© {year} Fortuna Connect. {t.footer.rights}</span><span className="mono">FC / {String(year).slice(-2)}</span></div></footer>;
+}
