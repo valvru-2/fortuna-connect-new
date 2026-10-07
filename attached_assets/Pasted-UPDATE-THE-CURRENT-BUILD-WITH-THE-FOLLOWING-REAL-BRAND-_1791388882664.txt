@@ -1,0 +1,24 @@
+UPDATE THE CURRENT BUILD WITH THE FOLLOWING REAL BRAND DETAILS, FIXES, AND SERVICES:
+
+1. BRANDING, DOMAIN & MULTI-LANGUAGE NAVIGATION:
+   - Brand Name: "Fortuna" (or "Fortuna Connect"). Domain reference: thefortunaconnect.com.
+   - Add a Language Switcher in the Header top-right (ES | EN | PT) with "ES" as the default active state. Implement React state (useState) so clicking a language updates the UI text smoothly.
+
+2. FIX PIPELINE SECTION LAYOUT (RESOLVE EMPTY SPACE):
+   - Redesign the "02 / OUR PIPELINE" section to eliminate the large empty white space on the right.
+   - Use a balanced 2-column layout (Split Grid):
+     - LEFT COLUMN (40% width): Headline ("Signal over noise. Always."), subheadline, and key philosophy points.
+     - RIGHT COLUMN (60% width): An interactive visual card or step-by-step progress widget simulating candidate evaluation in real-time (e.g., Stage 1: Sourcing -> Stage 2: Assessment -> Stage 3: Match). Alternatively, place a crisp, high-end corporate graphic or real-time pipeline preview box with sharp borders (#0B1120 background) to ground the visual weight.
+   - Spread the 3 to 4 pipeline steps evenly across the container or inside an interactive tab widget so there is no unused whitespace.
+
+3. INTEGRATE REAL SERVICES (5 CORE OFFERINGS):
+   - Replace generic service descriptions with a clean, 5-item architectural grid or structured list for Fortuna's real services:
+     1. Headhunting Ejecutivo (Executive Search & C-Level Sourcing)
+     2. Selección de Personal (Specialized Recruitment)
+     3. Outsourcing de Talento (Staff Augmentation & Dedicated Teams)
+     4. Nivelación de Idiomas (Language Assessment & Upskilling)
+     5. Evaluaciones Psicotécnicas (Psychometric & Behavioral Testing)
+   - Style: Minimalist cards with 1px solid borders, sharp corners, bold numbering (01 to 05), and short 2-line descriptions.
+
+4. COPY ADJUSTMENTS (SPANISH AS DEFAULT):
+   - Update main headings and Hero text to Spanish (Default language), maintaining the high-impact "Conectando talento con oportunidades" message for Fortuna Connect.
