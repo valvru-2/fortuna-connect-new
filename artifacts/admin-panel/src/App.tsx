@@ -22,6 +22,8 @@ import {
 type TableType = "applications" | "applicants" | "jobs" | "inquiries";
 type ViewMode = "table" | "kanban";
 
+const API_BASE = import.meta.env.VITE_API_URL || "";
+
 const APPLICATION_STATUSES = [
   { value: "recibido", label: "Recibido", color: "bg-slate-700/60 text-slate-200 border-slate-600" },
   { value: "en_revision", label: "En Revisión", color: "bg-amber-500/20 text-amber-300 border-amber-500/30" },
@@ -37,9 +39,6 @@ const INQUIRY_STATUSES = [
   { value: "cerrado", label: "Cerrado", color: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" },
   { value: "descartado", label: "Descartado", color: "bg-rose-500/20 text-rose-300 border-rose-500/30" },
 ];
-
-// Tiempo de vida de la caché: 3 minutos (en milisegundos)
-const CACHE_TTL = 3 * 60 * 1000;
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem("fc_admin_token") || "");
@@ -57,93 +56,71 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any[]>([]);
   const [metrics, setMetrics] = useState({ totalApplications: 0, totalJobs: 0, totalInquiries: 0, inReview: 0 });
-  const [isFromCache, setIsFromCache] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
 
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [newJob, setNewJob] = useState({ title: "", department: "", location: "Remoto", description: "" });
 
-  // Estructura de caché en memoria persistente durante la sesión
-  const cacheRef = useRef<{
-    tables: Partial<Record<TableType, { data: any[]; timestamp: number }>>;
-    metrics?: { data: any; timestamp: number };
-  }>({ tables: {} });
+  // Memoria en frontend (Caché local)
+  const cacheRef = useRef<Record<string, any[]>>({});
 
-  const fetchData = async (force = false) => {
-    const currentAuthToken = token || localStorage.getItem("fc_admin_token");
-    if (!currentAuthToken) return;
+  // 1. Cargar métricas solo una vez o al sincronizar
+  const fetchMetrics = async () => {
+    const currentToken = token || localStorage.getItem("fc_admin_token");
+    if (!currentToken) return;
 
-    const now = Date.now();
-    const cachedTable = cacheRef.current.tables[currentTable];
-    const cachedMetrics = cacheRef.current.metrics;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/metrics`, {
+        headers: { "x-admin-token": currentToken },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setMetrics(json);
+      }
+    } catch (e) {
+      console.warn("No se pudieron actualizar las métricas");
+    }
+  };
 
-    const isTableCacheValid = !force && cachedTable && now - cachedTable.timestamp < CACHE_TTL;
-    const isMetricsCacheValid = !force && cachedMetrics && now - cachedMetrics.timestamp < CACHE_TTL;
+  // 2. Cargar tabla con soporte de caché en memoria
+  const loadTableData = async (table: TableType, force = false) => {
+    const currentToken = token || localStorage.getItem("fc_admin_token");
+    if (!currentToken) return;
 
-    // 1. Si ambos están en caché válida, se cargan de inmediato sin peticiones HTTP
-    if (isTableCacheValid && isMetricsCacheValid) {
-      setData(cachedTable.data);
-      setMetrics(cachedMetrics.data);
-      setIsFromCache(true);
+    // Si ya existe en memoria y no es forzado, cambio inmediato (0 ms)
+    if (!force && cacheRef.current[table]) {
+      setData(cacheRef.current[table]);
+      setFromCache(true);
       return;
     }
 
-    // 2. Si la tabla está en caché pero las métricas no, mostramos la tabla de inmediato
-    if (isTableCacheValid) {
-      setData(cachedTable.data);
-      setIsFromCache(true);
-    } else {
-      setLoading(true);
-      setIsFromCache(false);
-    }
-
-    setLoginError("");
+    setLoading(true);
+    setFromCache(false);
 
     try {
-      const promises: Promise<any>[] = [];
+      const res = await fetch(`${API_BASE}/api/admin/${table}`, {
+        headers: { "x-admin-token": currentToken },
+      });
 
-      if (!isTableCacheValid) {
-        promises.push(
-          fetch(`/api/admin/${currentTable}`, {
-            headers: { "x-admin-token": currentAuthToken },
-          }).then(async (res) => {
-            if (res.status === 401) throw new Error("UNAUTHORIZED");
-            return { type: "table", json: await res.json() };
-          })
-        );
-      }
-
-      if (!isMetricsCacheValid) {
-        promises.push(
-          fetch("/api/admin/metrics", {
-            headers: { "x-admin-token": currentAuthToken },
-          }).then(async (res) => {
-            if (res.status === 401) throw new Error("UNAUTHORIZED");
-            return { type: "metrics", json: await res.json() };
-          })
-        );
-      }
-
-      const results = await Promise.all(promises);
-
-      for (const res of results) {
-        if (res.type === "table") {
-          const list = Array.isArray(res.json) ? res.json : [];
-          setData(list);
-          cacheRef.current.tables[currentTable] = { data: list, timestamp: Date.now() };
-        }
-        if (res.type === "metrics") {
-          setMetrics(res.json);
-          cacheRef.current.metrics = { data: res.json, timestamp: Date.now() };
-        }
-      }
-    } catch (err: any) {
-      if (err.message === "UNAUTHORIZED") {
+      if (res.status === 401) {
         setIsAuthenticated(false);
         localStorage.removeItem("fc_admin_token");
-        setLoginError("Token de acceso no válido o caducado.");
-      } else {
-        console.error("Error al cargar datos:", err);
+        setLoginError("Token de sesión expirado.");
+        return;
       }
+
+      if (!res.ok) {
+        throw new Error(`El servidor respondió con código ${res.status}`);
+      }
+
+      const json = await res.json();
+      const list = Array.isArray(json) ? json : [];
+      
+      // Guardar en estado y en caché
+      cacheRef.current[table] = list;
+      setData(list);
+    } catch (err: any) {
+      console.error(`Error cargando ${table}:`, err);
     } finally {
       setLoading(false);
     }
@@ -151,7 +128,13 @@ export default function App() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      fetchData(false); // Consulta con caché
+      fetchMetrics();
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadTableData(currentTable);
       setSelectedRecord(null);
     }
   }, [currentTable, isAuthenticated]);
@@ -166,7 +149,7 @@ export default function App() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!token.trim()) {
-      setLoginError("Ingresa la clave secreta de administración.");
+      setLoginError("Ingresa la clave secreta.");
       return;
     }
     localStorage.setItem("fc_admin_token", token);
@@ -176,19 +159,26 @@ export default function App() {
   const handleLogout = () => {
     setToken("");
     localStorage.removeItem("fc_admin_token");
-    cacheRef.current = { tables: {} };
+    cacheRef.current = {};
     setIsAuthenticated(false);
     setData([]);
     setSelectedRecord(null);
   };
 
-  // Guardar cambios y actualizar la caché local de inmediato
+  const syncEverything = async () => {
+    await Promise.all([
+      fetchMetrics(),
+      loadTableData(currentTable, true),
+    ]);
+  };
+
+  // Guardar modificaciones actualizando memoria inmediatamente
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     setSaveSuccess(false);
     try {
-      const res = await fetch(`/api/admin/${currentTable}/${editForm.id}`, {
+      const res = await fetch(`${API_BASE}/api/admin/${currentTable}/${editForm.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -197,20 +187,18 @@ export default function App() {
         body: JSON.stringify(editForm),
       });
 
-      if (!res.ok) throw new Error("No se pudieron guardar las modificaciones");
+      if (!res.ok) throw new Error("Error en la actualización");
 
-      // Actualizamos estado de UI y caché
       const updatedList = data.map((item) =>
         item.id === editForm.id ? { ...item, ...editForm } : item
       );
-      setData(updatedList);
-      if (cacheRef.current.tables[currentTable]) {
-        cacheRef.current.tables[currentTable]!.data = updatedList;
-      }
 
+      setData(updatedList);
+      cacheRef.current[currentTable] = updatedList;
       setSelectedRecord({ ...editForm });
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      setTimeout(() => setSaveSuccess(false), 2500);
+      fetchMetrics();
     } catch (err: any) {
       alert(err.message || "Error al actualizar");
     } finally {
@@ -218,23 +206,19 @@ export default function App() {
     }
   };
 
-  // Eliminar registro y limpiar de la caché
   const handleDeleteRecord = async (id: string) => {
     if (!window.confirm("¿Deseas eliminar este registro de manera definitiva?")) return;
     try {
-      const res = await fetch(`/api/admin/${currentTable}/${id}`, {
+      const res = await fetch(`${API_BASE}/api/admin/${currentTable}/${id}`, {
         method: "DELETE",
         headers: { "x-admin-token": token },
       });
       if (res.ok) {
-        const filteredList = data.filter((item) => item.id !== id);
-        setData(filteredList);
-        if (cacheRef.current.tables[currentTable]) {
-          cacheRef.current.tables[currentTable]!.data = filteredList;
-        }
-        delete cacheRef.current.metrics; // invalidar métricas
+        const filtered = data.filter((item) => item.id !== id);
+        setData(filtered);
+        cacheRef.current[currentTable] = filtered;
         setSelectedRecord(null);
-        fetchData(true);
+        fetchMetrics();
       }
     } catch (err) {
       console.error("Error al eliminar:", err);
@@ -244,7 +228,7 @@ export default function App() {
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch("/api/admin/jobs", {
+      const res = await fetch(`${API_BASE}/api/admin/jobs`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -255,9 +239,8 @@ export default function App() {
       if (res.ok) {
         setShowCreateJob(false);
         setNewJob({ title: "", department: "", location: "Remoto", description: "" });
-        delete cacheRef.current.tables.jobs;
-        delete cacheRef.current.metrics;
-        fetchData(true);
+        loadTableData("jobs", true);
+        fetchMetrics();
       }
     } catch (err) {
       console.error("Error al crear vacante:", err);
@@ -312,19 +295,16 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-slate-950 text-slate-200">
-      {/* 1. Header con métricas */}
+      {/* Header */}
       <header className="flex h-14 items-center justify-between border-b border-slate-800 bg-slate-900/80 px-4 backdrop-blur">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white shadow-indigo-500/20 shadow-md">
             F
           </div>
           <span className="font-semibold tracking-tight text-white text-base">Fortuna Admin</span>
-          <span className="rounded bg-indigo-500/10 px-2 py-0.5 text-xs text-indigo-400 font-medium border border-indigo-500/20">
-            Control Operativo
-          </span>
-          {isFromCache && (
+          {fromCache && (
             <span className="hidden sm:inline-flex items-center gap-1 rounded bg-slate-800/80 px-2 py-0.5 text-[10px] text-slate-400 border border-slate-700/50">
-              <Database size={10} className="text-emerald-400" /> Memoria Caché activa
+              <Database size={10} className="text-emerald-400" /> Memoria local
             </span>
           )}
         </div>
@@ -338,8 +318,8 @@ export default function App() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => fetchData(true)}
-            title="Descargar datos frescos del servidor"
+            onClick={syncEverything}
+            title="Recargar datos frescos del servidor"
             className="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-700 transition"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -355,7 +335,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* 2. Pestañas */}
+      {/* Pestañas de navegación */}
       <div className="flex h-10 items-center justify-between border-b border-slate-800 bg-slate-900 px-4">
         <div className="flex items-center gap-1">
           {[
@@ -378,9 +358,6 @@ export default function App() {
               >
                 <Icon className="h-3.5 w-3.5" />
                 {tab.label}
-                <span className="rounded-full bg-slate-800 px-1.5 py-0.2 text-[10px] text-slate-400">
-                  {currentTable === tab.id ? data.length : ""}
-                </span>
               </button>
             );
           })}
@@ -396,7 +373,7 @@ export default function App() {
         )}
       </div>
 
-      {/* 3. Controles */}
+      {/* Controles y búsqueda */}
       <div className="flex h-12 items-center justify-between border-b border-slate-800/80 bg-slate-950/60 px-4">
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -405,7 +382,7 @@ export default function App() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Buscar en ${currentTable}...`}
+              placeholder={`Filtrar en ${currentTable}...`}
               className="h-8 w-64 rounded-md border border-slate-800 bg-slate-900 pl-8 pr-3 text-xs text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
             />
           </div>
@@ -437,7 +414,7 @@ export default function App() {
         </span>
       </div>
 
-      {/* 4. Tabla / Kanban */}
+      {/* Cuerpo principal */}
       <div className="relative flex flex-1 overflow-hidden">
         <main className="flex-1 overflow-auto bg-slate-950">
           {viewMode === "table" ? (
@@ -624,7 +601,7 @@ export default function App() {
           )}
         </main>
 
-        {/* 5. Barra Lateral Editable */}
+        {/* Panel lateral de edición */}
         {selectedRecord && (
           <aside className="w-[420px] border-l border-slate-800 bg-slate-900/95 p-5 shadow-2xl overflow-y-auto backdrop-blur flex flex-col justify-between">
             <div>
@@ -640,12 +617,11 @@ export default function App() {
 
               {saveSuccess && (
                 <div className="my-3 flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-400 font-medium">
-                  <Check size={14} /> ¡Datos actualizados en PostgreSQL correctamente!
+                  <Check size={14} /> ¡Datos actualizados correctamente!
                 </div>
               )}
 
               <form onSubmit={handleSaveEdit} className="mt-5 space-y-3.5 text-xs">
-                {/* 1. Postulaciones */}
                 {currentTable === "applications" && (
                   <>
                     <div className="grid grid-cols-2 gap-2">
@@ -723,14 +699,13 @@ export default function App() {
                           rel="noreferrer"
                           className="inline-flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 hover:underline"
                         >
-                          <FileDown size={15} /> Ver archivo adjunto (CV en Storage)
+                          <FileDown size={15} /> Ver archivo adjunto (CV)
                         </a>
                       </div>
                     )}
                   </>
                 )}
 
-                {/* 2. Candidatos */}
                 {currentTable === "applicants" && (
                   <>
                     <div className="space-y-1">
@@ -765,7 +740,6 @@ export default function App() {
                   </>
                 )}
 
-                {/* 3. Vacantes */}
                 {currentTable === "jobs" && (
                   <>
                     <div className="space-y-1">
@@ -810,7 +784,6 @@ export default function App() {
                   </>
                 )}
 
-                {/* 4. Consultas B2B */}
                 {currentTable === "inquiries" && (
                   <>
                     <div className="space-y-1">
@@ -886,7 +859,7 @@ export default function App() {
                         rows={4}
                         value={editForm.notes || ""}
                         onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                        placeholder="Reunión agendada para el lunes, perfiles requeridos..."
+                        placeholder="Comentarios de reunión, perfiles requeridos..."
                         className="w-full rounded bg-slate-950 p-2 border border-slate-700 text-white focus:border-indigo-500 focus:outline-none resize-none"
                       />
                     </div>
@@ -917,16 +890,13 @@ export default function App() {
         )}
       </div>
 
-      {/* 6. Modal para Crear Vacante */}
+      {/* Modal Nueva Vacante */}
       {showCreateJob && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white text-base">Crear Nueva Vacante</h3>
-              <button
-                onClick={() => setShowCreateJob(false)}
-                className="text-slate-400 hover:text-white"
-              >
+              <button onClick={() => setShowCreateJob(false)} className="text-slate-400 hover:text-white">
                 <X size={18} />
               </button>
             </div>
@@ -945,10 +915,10 @@ export default function App() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Departamento / Especialidad</label>
+                <label className="text-slate-300 font-medium">Departamento</label>
                 <input
                   type="text"
-                  placeholder="Ej: Tecnología, Finanzas, Producto"
+                  placeholder="Ej: Tecnología, Finanzas"
                   value={newJob.department}
                   onChange={(e) => setNewJob({ ...newJob, department: e.target.value })}
                   className="w-full rounded bg-slate-950 p-2.5 border border-slate-700 text-white focus:border-indigo-500 focus:outline-none"
@@ -959,7 +929,7 @@ export default function App() {
                 <label className="text-slate-300 font-medium">Ubicación</label>
                 <input
                   type="text"
-                  placeholder="Ej: Remoto, Madrid, Híbrido"
+                  placeholder="Ej: Remoto, Madrid"
                   value={newJob.location}
                   onChange={(e) => setNewJob({ ...newJob, location: e.target.value })}
                   className="w-full rounded bg-slate-950 p-2.5 border border-slate-700 text-white focus:border-indigo-500 focus:outline-none"
