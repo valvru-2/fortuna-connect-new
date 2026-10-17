@@ -1,5 +1,6 @@
 import { Menu, X, ArrowUpRight } from 'lucide-react';
 import { languages, b2bTranslations, type Language, type Translations } from '../content';
+import { FortunaLogo } from './FortunaLogo';
 
 type Props = {
   language: Language;
@@ -14,7 +15,7 @@ export default function Header({ language, setLanguage, t, menuOpen, setMenuOpen
   return (
     <header className="nav-bar">
       <a className="brand-lockup" href="#top" data-testid="link-brand" aria-label="Fortuna Connect">
-        <span className="brand-mark">F</span><span className="brand-type">FORTUNA CONNECT</span>
+        <FortunaLogo className="h-7 w-auto" showText={true} lightMode={true} />
       </a>
       <nav className={`nav-links ${menuOpen ? 'is-open' : ''}`} aria-label={t.navLabel}>
         <a href="#companies" onClick={() => setMenuOpen(false)} data-testid="link-companies">{t.navCompanies}</a>
@@ -24,10 +25,27 @@ export default function Header({ language, setLanguage, t, menuOpen, setMenuOpen
         </button>
       </nav>
       <div className="language-switcher" role="group" aria-label={t.languageLabel}>
-        {languages.map((option) => <button className={language === option ? 'is-active' : ''} type="button" key={option} lang={option.toLowerCase()} aria-pressed={language === option} onClick={() => { setLanguage(option); setMenuOpen(false); }} data-testid={`button-language-${option.toLowerCase()}`}>{option}</button>)}
+        {languages.map((option) => (
+          <button
+            className={language === option ? 'is-active' : ''}
+            type="button"
+            key={option}
+            lang={option.toLowerCase()}
+            aria-pressed={language === option}
+            onClick={() => setLanguage(option)}
+          >
+            {option}
+          </button>
+        ))}
       </div>
-      <button className="nav-menu-toggle" type="button" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? t.menuClose : t.menuOpen} aria-expanded={menuOpen} data-testid="button-menu">
-        {menuOpen ? <X size={22} /> : <Menu size={22} />}
+      <button
+        className="nav-menu-toggle"
+        type="button"
+        aria-expanded={menuOpen}
+        aria-label="Toggle navigation menu"
+        onClick={() => setMenuOpen(!menuOpen)}
+      >
+        {menuOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
     </header>
   );

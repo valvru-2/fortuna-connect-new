@@ -8,7 +8,7 @@ UPDATE THE CURRENT BUILD WITH THE FOLLOWING REAL BRAND DETAILS, FIXES, AND SERVI
    - Redesign the "02 / OUR PIPELINE" section to eliminate the large empty white space on the right.
    - Use a balanced 2-column layout (Split Grid):
      - LEFT COLUMN (40% width): Headline ("Signal over noise. Always."), subheadline, and key philosophy points.
-     - RIGHT COLUMN (60% width): An interactive visual card or step-by-step progress widget simulating candidate evaluation in real-time (e.g., Stage 1: Sourcing -> Stage 2: Assessment -> Stage 3: Match). Alternatively, place a crisp, high-end corporate graphic or real-time pipeline preview box with sharp borders (#0B1120 background) to ground the visual weight.
+     - RIGHT COLUMN (60% width): An interactive visual card or step-by-step progress widget simulating candidate evaluation in real-time (e.g., Stage 1: Sourcing -> Stage 2: Assessment -> Stage 3: Match). Alternatively, place a crisp, high-end corporate graphic or real-time pipeline preview box with sharp borders (#2E241E background) to ground the visual weight.
    - Spread the 3 to 4 pipeline steps evenly across the container or inside an interactive tab widget so there is no unused whitespace.
 
 3. INTEGRATE REAL SERVICES (5 CORE OFFERINGS):
