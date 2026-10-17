@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Table2,
   Kanban,
@@ -15,7 +15,8 @@ import {
   Trash2,
   Plus,
   Check,
-  AlertCircle
+  AlertCircle,
+  Database
 } from "lucide-react";
 
 type TableType = "applications" | "applicants" | "jobs" | "inquiries";
@@ -37,6 +38,9 @@ const INQUIRY_STATUSES = [
   { value: "descartado", label: "Descartado", color: "bg-rose-500/20 text-rose-300 border-rose-500/30" },
 ];
 
+// Tiempo de vida de la caché: 3 minutos (en milisegundos)
+const CACHE_TTL = 3 * 60 * 1000;
+
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem("fc_admin_token") || "");
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem("fc_admin_token"));
@@ -53,37 +57,93 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any[]>([]);
   const [metrics, setMetrics] = useState({ totalApplications: 0, totalJobs: 0, totalInquiries: 0, inReview: 0 });
+  const [isFromCache, setIsFromCache] = useState(false);
 
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [newJob, setNewJob] = useState({ title: "", department: "", location: "Remoto", description: "" });
 
-  const fetchData = async () => {
-    setLoading(true);
-    setLoginError("");
-    try {
-      const [resData, resMetrics] = await Promise.all([
-        fetch(`/api/admin/${currentTable}`, {
-          headers: { "x-admin-token": token },
-        }),
-        fetch("/api/admin/metrics", {
-          headers: { "x-admin-token": token },
-        }),
-      ]);
+  // Estructura de caché en memoria persistente durante la sesión
+  const cacheRef = useRef<{
+    tables: Partial<Record<TableType, { data: any[]; timestamp: number }>>;
+    metrics?: { data: any; timestamp: number };
+  }>({ tables: {} });
 
-      if (resData.status === 401 || resMetrics.status === 401) {
-        setIsAuthenticated(false);
-        localStorage.removeItem("fc_admin_token");
-        setLoginError("Token incorrecto o no autorizado.");
-        setLoading(false);
-        return;
+  const fetchData = async (force = false) => {
+    const currentAuthToken = token || localStorage.getItem("fc_admin_token");
+    if (!currentAuthToken) return;
+
+    const now = Date.now();
+    const cachedTable = cacheRef.current.tables[currentTable];
+    const cachedMetrics = cacheRef.current.metrics;
+
+    const isTableCacheValid = !force && cachedTable && now - cachedTable.timestamp < CACHE_TTL;
+    const isMetricsCacheValid = !force && cachedMetrics && now - cachedMetrics.timestamp < CACHE_TTL;
+
+    // 1. Si ambos están en caché válida, se cargan de inmediato sin peticiones HTTP
+    if (isTableCacheValid && isMetricsCacheValid) {
+      setData(cachedTable.data);
+      setMetrics(cachedMetrics.data);
+      setIsFromCache(true);
+      return;
+    }
+
+    // 2. Si la tabla está en caché pero las métricas no, mostramos la tabla de inmediato
+    if (isTableCacheValid) {
+      setData(cachedTable.data);
+      setIsFromCache(true);
+    } else {
+      setLoading(true);
+      setIsFromCache(false);
+    }
+
+    setLoginError("");
+
+    try {
+      const promises: Promise<any>[] = [];
+
+      if (!isTableCacheValid) {
+        promises.push(
+          fetch(`/api/admin/${currentTable}`, {
+            headers: { "x-admin-token": currentAuthToken },
+          }).then(async (res) => {
+            if (res.status === 401) throw new Error("UNAUTHORIZED");
+            return { type: "table", json: await res.json() };
+          })
+        );
       }
 
-      const json = await resData.json();
-      const mJson = await resMetrics.json();
-      setData(Array.isArray(json) ? json : []);
-      setMetrics(mJson);
-    } catch (err) {
-      console.error("Error al cargar datos:", err);
+      if (!isMetricsCacheValid) {
+        promises.push(
+          fetch("/api/admin/metrics", {
+            headers: { "x-admin-token": currentAuthToken },
+          }).then(async (res) => {
+            if (res.status === 401) throw new Error("UNAUTHORIZED");
+            return { type: "metrics", json: await res.json() };
+          })
+        );
+      }
+
+      const results = await Promise.all(promises);
+
+      for (const res of results) {
+        if (res.type === "table") {
+          const list = Array.isArray(res.json) ? res.json : [];
+          setData(list);
+          cacheRef.current.tables[currentTable] = { data: list, timestamp: Date.now() };
+        }
+        if (res.type === "metrics") {
+          setMetrics(res.json);
+          cacheRef.current.metrics = { data: res.json, timestamp: Date.now() };
+        }
+      }
+    } catch (err: any) {
+      if (err.message === "UNAUTHORIZED") {
+        setIsAuthenticated(false);
+        localStorage.removeItem("fc_admin_token");
+        setLoginError("Token de acceso no válido o caducado.");
+      } else {
+        console.error("Error al cargar datos:", err);
+      }
     } finally {
       setLoading(false);
     }
@@ -91,12 +151,11 @@ export default function App() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      fetchData();
+      fetchData(false); // Consulta con caché
       setSelectedRecord(null);
     }
   }, [currentTable, isAuthenticated]);
 
-  // Sincronizar formulario editable cada vez que se selecciona una fila
   useEffect(() => {
     if (selectedRecord) {
       setEditForm({ ...selectedRecord });
@@ -107,7 +166,7 @@ export default function App() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!token.trim()) {
-      setLoginError("Debes ingresar el token de acceso.");
+      setLoginError("Ingresa la clave secreta de administración.");
       return;
     }
     localStorage.setItem("fc_admin_token", token);
@@ -117,12 +176,13 @@ export default function App() {
   const handleLogout = () => {
     setToken("");
     localStorage.removeItem("fc_admin_token");
+    cacheRef.current = { tables: {} };
     setIsAuthenticated(false);
     setData([]);
     setSelectedRecord(null);
   };
 
-  // Guardar cambios del formulario en la base de datos
+  // Guardar cambios y actualizar la caché local de inmediato
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -137,36 +197,47 @@ export default function App() {
         body: JSON.stringify(editForm),
       });
 
-      if (!res.ok) throw new Error("Error al guardar en el servidor");
+      if (!res.ok) throw new Error("No se pudieron guardar las modificaciones");
 
-      setData((prev) =>
-        prev.map((item) => (item.id === editForm.id ? { ...item, ...editForm } : item))
+      // Actualizamos estado de UI y caché
+      const updatedList = data.map((item) =>
+        item.id === editForm.id ? { ...item, ...editForm } : item
       );
+      setData(updatedList);
+      if (cacheRef.current.tables[currentTable]) {
+        cacheRef.current.tables[currentTable]!.data = updatedList;
+      }
+
       setSelectedRecord({ ...editForm });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-      fetchData();
     } catch (err: any) {
-      alert(err.message || "No se pudo actualizar el registro");
+      alert(err.message || "Error al actualizar");
     } finally {
       setIsSaving(false);
     }
   };
 
+  // Eliminar registro y limpiar de la caché
   const handleDeleteRecord = async (id: string) => {
-    if (!window.confirm("¿Seguro que deseas eliminar este registro permanentemente?")) return;
+    if (!window.confirm("¿Deseas eliminar este registro de manera definitiva?")) return;
     try {
       const res = await fetch(`/api/admin/${currentTable}/${id}`, {
         method: "DELETE",
         headers: { "x-admin-token": token },
       });
       if (res.ok) {
-        setData((prev) => prev.filter((item) => item.id !== id));
+        const filteredList = data.filter((item) => item.id !== id);
+        setData(filteredList);
+        if (cacheRef.current.tables[currentTable]) {
+          cacheRef.current.tables[currentTable]!.data = filteredList;
+        }
+        delete cacheRef.current.metrics; // invalidar métricas
         setSelectedRecord(null);
-        fetchData();
+        fetchData(true);
       }
     } catch (err) {
-      console.error("Error al eliminar registro:", err);
+      console.error("Error al eliminar:", err);
     }
   };
 
@@ -184,7 +255,9 @@ export default function App() {
       if (res.ok) {
         setShowCreateJob(false);
         setNewJob({ title: "", department: "", location: "Remoto", description: "" });
-        fetchData();
+        delete cacheRef.current.tables.jobs;
+        delete cacheRef.current.metrics;
+        fetchData(true);
       }
     } catch (err) {
       console.error("Error al crear vacante:", err);
@@ -209,13 +282,13 @@ export default function App() {
           </div>
           <h2 className="text-2xl font-bold mb-2 text-center">Fortuna Admin</h2>
           <p className="text-slate-400 text-xs text-center mb-6">
-            Ingresa tu clave maestra configurada en <code className="text-indigo-400 font-mono">.env</code>
+            Introduce la clave de acceso de administrador
           </p>
 
           <form onSubmit={handleLogin}>
             <input
               type="password"
-              placeholder="Clave de administrador"
+              placeholder="ADMIN_SECRET_KEY"
               className="w-full mb-4 px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white focus:border-indigo-500 focus:outline-none"
               value={token}
               onChange={(e) => setToken(e.target.value)}
@@ -229,7 +302,7 @@ export default function App() {
               type="submit"
               className="w-full bg-indigo-600 py-2.5 rounded-lg text-sm font-semibold hover:bg-indigo-500 transition-colors"
             >
-              Iniciar sesión
+              Acceder al panel
             </button>
           </form>
         </div>
@@ -239,7 +312,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-slate-950 text-slate-200">
-      {/* 1. Header */}
+      {/* 1. Header con métricas */}
       <header className="flex h-14 items-center justify-between border-b border-slate-800 bg-slate-900/80 px-4 backdrop-blur">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white shadow-indigo-500/20 shadow-md">
@@ -249,6 +322,11 @@ export default function App() {
           <span className="rounded bg-indigo-500/10 px-2 py-0.5 text-xs text-indigo-400 font-medium border border-indigo-500/20">
             Control Operativo
           </span>
+          {isFromCache && (
+            <span className="hidden sm:inline-flex items-center gap-1 rounded bg-slate-800/80 px-2 py-0.5 text-[10px] text-slate-400 border border-slate-700/50">
+              <Database size={10} className="text-emerald-400" /> Memoria Caché activa
+            </span>
+          )}
         </div>
 
         <div className="hidden md:flex items-center gap-6 text-xs text-slate-400">
@@ -260,7 +338,8 @@ export default function App() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={fetchData}
+            onClick={() => fetchData(true)}
+            title="Descargar datos frescos del servidor"
             className="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-700 transition"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -317,7 +396,7 @@ export default function App() {
         )}
       </div>
 
-      {/* 3. Filtros */}
+      {/* 3. Controles */}
       <div className="flex h-12 items-center justify-between border-b border-slate-800/80 bg-slate-950/60 px-4">
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -354,11 +433,11 @@ export default function App() {
         </div>
 
         <span className="text-xs text-slate-500 font-mono">
-          {filteredData.length} registros (Haz clic para editar)
+          {filteredData.length} registros
         </span>
       </div>
 
-      {/* 4. Tablas y Kanban */}
+      {/* 4. Tabla / Kanban */}
       <div className="relative flex flex-1 overflow-hidden">
         <main className="flex-1 overflow-auto bg-slate-950">
           {viewMode === "table" ? (
@@ -545,7 +624,7 @@ export default function App() {
           )}
         </main>
 
-        {/* 5. Panel Lateral con inputs 100% editables */}
+        {/* 5. Barra Lateral Editable */}
         {selectedRecord && (
           <aside className="w-[420px] border-l border-slate-800 bg-slate-900/95 p-5 shadow-2xl overflow-y-auto backdrop-blur flex flex-col justify-between">
             <div>
@@ -700,7 +779,7 @@ export default function App() {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-slate-300 font-medium">Departamento / Especialidad</label>
+                      <label className="text-slate-300 font-medium">Departamento</label>
                       <input
                         type="text"
                         value={editForm.department || ""}
@@ -838,7 +917,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Modal para Crear Nueva Vacante */}
+      {/* 6. Modal para Crear Vacante */}
       {showCreateJob && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
