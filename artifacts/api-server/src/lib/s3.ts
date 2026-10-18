@@ -46,7 +46,7 @@ export async function uploadFileToS3(
   mimeType: string
 ): Promise<string> {
   const s3 = getS3Client();
-  const bucketName = process.env.S3_BUCKET_NAME?.trim() || "fortuna-cvs";
+  const bucketName = (process.env.S3_BUCKET_NAME || "fortuna-cvs").replace(/["']/g, "").trim();
 
   const command = new PutObjectCommand({
     Bucket: bucketName,
@@ -57,11 +57,15 @@ export async function uploadFileToS3(
 
   await s3.send(command);
 
-  // URL pública directa de Supabase Storage
+  // Limpiar comillas accidentales y barras finales
   if (process.env.S3_PUBLIC_URL) {
-    return `${process.env.S3_PUBLIC_URL}/${fileName}`;
+    const cleanPublicUrl = process.env.S3_PUBLIC_URL
+      .replace(/["']/g, "")
+      .trim()
+      .replace(/\/+$/, "");
+    return `${cleanPublicUrl}/${fileName}`;
   }
 
-  const endpoint = process.env.S3_ENDPOINT || "";
+  const endpoint = (process.env.S3_ENDPOINT || "").replace(/["']/g, "").trim().replace(/\/+$/, "");
   return `${endpoint}/${bucketName}/${fileName}`;
 }
