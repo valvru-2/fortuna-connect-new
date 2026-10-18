@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://api.thefortunaconnect.com/api/:path*"
+      "destination": "http://35.208.123.233/api/:path*"
     },
     {
       "source": "/(.*)",
