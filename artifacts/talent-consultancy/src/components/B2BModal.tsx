@@ -106,7 +106,7 @@ export default function B2BModal({
                 Puedes agendar una sesión exploratoria de 15 minutos directamente con nuestro equipo de consultores.
               </p>
               <a
-                href="https://calendly.com" 
+                href="https://calendly.com/thefortunaconnect-info/30min" 
                 target="_blank" 
                 rel="noreferrer"
                 className="inline-block mt-1 text-xs text-blue-400 hover:text-blue-300 underline font-medium"
